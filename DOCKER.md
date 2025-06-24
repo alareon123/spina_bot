@@ -252,16 +252,23 @@ docker-compose ps
 
 **База данных не сохраняется:**
 ```bash
-# Проверка volumes
-docker volume ls
-docker volume inspect spina_bot_data
+# Проверка volumes и создание директорий
+mkdir -p data logs
+ls -la data/
+
+# Проверка прав доступа (Linux/Mac)
+sudo chown -R 1000:1000 data/
 ```
 
-**Нет доступа к файлам:**
+**Ошибка "unable to open database file":**
 ```bash
-# Проверка прав доступа
-ls -la data/
-sudo chown -R 1000:1000 data/
+# Убедитесь что директории созданы
+mkdir -p data logs
+
+# Перестройте контейнер
+docker-compose down
+docker-compose build --no-cache
+docker-compose up -d
 ```
 
 ### Очистка

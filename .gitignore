@@ -53,4 +53,8 @@ logs/
 backups/
 
 # Test files
-test_*.py 
+test_*.py
+
+# Startup outputs
+bot_logs.txt
+container_info.txt 

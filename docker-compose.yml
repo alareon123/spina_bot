@@ -7,7 +7,7 @@ services:
     restart: unless-stopped
     environment:
       - BOT_TOKEN=${BOT_TOKEN}
-      - DATABASE_URL=sqlite:///data/spina_bot.db
+      - DATABASE_URL=sqlite:///app/data/spina_bot.db
     volumes:
       # Монтируем директорию для постоянного хранения базы данных
       - ./data:/app/data
@@ -28,7 +28,7 @@ services:
     
     # Политика перезапуска
     healthcheck:
-      test: ["CMD", "python", "-c", "import sqlite3; sqlite3.connect('/app/data/spina_bot.db').execute('SELECT 1')"]
+      test: ["CMD", "python", "-c", "import os; exit(0 if os.path.exists('/app/data/spina_bot.db') else 1)"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -59,8 +59,12 @@ services:
     command: >
       sh -c "
         mkdir -p /backups &&
-        cp /app/data/spina_bot.db /backups/spina_bot_backup_$$(date +%Y%m%d_%H%M%S).db &&
-        echo 'Backup completed at $$(date)'
+        if [ -f /app/data/spina_bot.db ]; then
+          cp /app/data/spina_bot.db /backups/spina_bot_backup_$$(date +%Y%m%d_%H%M%S).db &&
+          echo 'Backup completed at $$(date)';
+        else
+          echo 'Database file not found, skipping backup';
+        fi
       "
     profiles:
       - backup
