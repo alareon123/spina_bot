@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  spina-bot:
+    build: .
+    container_name: spina-bot
+    restart: unless-stopped
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
+      - DATABASE_URL=sqlite:///data/spina_bot.db
+    volumes:
+      # Монтируем директорию для постоянного хранения базы данных
+      - ./data:/app/data
+      # Опционально: монтируем логи
+      - ./logs:/app/logs
+    networks:
+      - spina-bot-network
+    
+    # Ограничения ресурсов
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+          cpus: '0.25'
+    
+    # Политика перезапуска
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sqlite3; sqlite3.connect('/app/data/spina_bot.db').execute('SELECT 1')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Опциональный сервис для мониторинга логов
+  log-viewer:
+    image: amir20/dozzle:latest
+    container_name: spina-bot-logs
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - spina-bot-network
+    profiles:
+      - monitoring
+
+  # Опциональный сервис для резервного копирования базы данных
+  backup:
+    image: alpine:latest
+    container_name: spina-bot-backup
+    restart: "no"
+    volumes:
+      - ./data:/app/data:ro
+      - ./backups:/backups
+    command: >
+      sh -c "
+        mkdir -p /backups &&
+        cp /app/data/spina_bot.db /backups/spina_bot_backup_$$(date +%Y%m%d_%H%M%S).db &&
+        echo 'Backup completed at $$(date)'
+      "
+    profiles:
+      - backup
+
+networks:
+  spina-bot-network:
+    driver: bridge
+
+volumes:
+  spina-bot-data:
+    driver: local 
