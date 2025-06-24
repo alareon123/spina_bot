@@ -18,7 +18,6 @@ RUN adduser --disabled-password --gecos '' appuser
 
 # Создаем директорию для базы данных и устанавливаем права
 RUN mkdir -p /app/data && \
-    chmod +x /app/start.sh && \
     chown -R appuser:appuser /app
 
 # Устанавливаем переменную окружения для базы данных
@@ -35,4 +34,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD python -c "import os; exit(0 if os.path.exists('/app/data') else 1)" || exit 1
 
 # Команда запуска
-CMD ["./start.sh"] 
+CMD ["python", "main.py"] 

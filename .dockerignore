@@ -42,11 +42,13 @@ ENV/
 .DS_Store
 Thumbs.db
 
-# Documentation
+# Documentation (except specific files)
 README.md
 SETUP.md
 USAGE_EXAMPLES.md
-*.md
+DOCKER.md
+QUICKSTART.md
+TROUBLESHOOTING.md
 
 # Local data
 data/

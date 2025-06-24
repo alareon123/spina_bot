@@ -37,10 +37,6 @@ class SpinaBot:
         # Добавляем ссылку на бота в контекст приложения для обновления планировщика
         self.application.spina_bot = self
         
-        # Инициализируем базу данных
-        create_tables()
-        init_default_settings()
-        
         # Настраиваем обработчики
         self.setup_handlers()
         
@@ -208,8 +204,37 @@ async def handle_pain_rating_from_text(update, context, pain_level):
 def main():
     """Главная функция"""
     try:
+        # Проверяем BOT_TOKEN
+        token = os.getenv('BOT_TOKEN')
+        if not token:
+            logger.error("❌ BOT_TOKEN не установлен в переменных окружения")
+            return
+        
+        logger.info("✅ BOT_TOKEN найден")
+        
+        # Создаем директорию для базы данных если её нет
+        data_dir = "/app/data" if os.path.exists("/app") else "data"
+        if not os.path.exists(data_dir):
+            logger.info(f"📁 Создание директории для базы данных: {data_dir}")
+            os.makedirs(data_dir, exist_ok=True)
+        
+        logger.info("✅ Директория для базы данных готова")
+        
+        # Инициализируем базу данных
+        logger.info("🗄️ Инициализация базы данных...")
+        try:
+            create_tables()
+            init_default_settings()
+            logger.info("✅ База данных инициализирована")
+        except Exception as db_error:
+            logger.error(f"❌ Ошибка инициализации базы данных: {db_error}")
+            return
+        
+        # Запускаем бота
+        logger.info("🤖 Запуск бота...")
         bot = SpinaBot()
         bot.run()
+        
     except KeyboardInterrupt:
         logger.info("Получен сигнал остановки. Завершение работы...")
     except Exception as e:
