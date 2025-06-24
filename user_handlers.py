@@ -1,6 +1,6 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from database import SessionLocal, User, UserResponse, AudioMessage
+from database import SessionLocal, User, UserResponse, VideoLesson
 from datetime import datetime
 import logging
 
@@ -75,7 +75,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "💡 *Как пользоваться ботом:*\n"
         "• Каждый день я буду спрашивать о состоянии вашей спины\n"
         "• Оцените боль от 1 до 5\n"
-        "• Получайте персональные аудио-упражнения\n"
+        "• Получайте персональные видео-уроки\n"
         "• Следите за своим прогрессом\n\n"
         "Берегите свою спину! 💙"
     )
@@ -128,36 +128,42 @@ async def handle_pain_rating(update: Update, context: ContextTypes.DEFAULT_TYPE)
         
         db.commit()
         
-        # Получаем соответствующее аудиосообщение
-        audio_message = db.query(AudioMessage).filter(AudioMessage.pain_level == pain_level).first()
+        # Получаем соответствующий видео-урок
+        video_lesson = db.query(VideoLesson).filter(VideoLesson.pain_level == pain_level).first()
         
-        if audio_message:
-            # Отправляем текстовое описание (если есть)
-            if audio_message.text_description:
-                await query.edit_message_text(
-                    f"Спасибо за оценку! Уровень боли: {pain_level}\n\n"
-                    f"{audio_message.text_description}"
-                )
-            else:
-                await query.edit_message_text(
-                    f"Спасибо за оценку! Уровень боли: {pain_level}\n\n"
-                    "Вот персональная аудио-тренировка для вас:"
-                )
+        if video_lesson:
+            # Формируем описание видео
+            video_info = f"Спасибо за оценку! Уровень боли: {pain_level}\n\n"
             
-            # Отправляем аудиосообщение
-            await context.bot.send_audio(
+            if video_lesson.title:
+                video_info += f"🎥 *{video_lesson.title}*\n\n"
+                
+            if video_lesson.description:
+                video_info += f"{video_lesson.description}\n\n"
+                
+            if video_lesson.duration:
+                minutes = video_lesson.duration // 60
+                seconds = video_lesson.duration % 60
+                video_info += f"⏱ Длительность: {minutes}:{seconds:02d}\n\n"
+            
+            video_info += "Вот персональный видео-урок для вас:"
+            
+            await query.edit_message_text(video_info, parse_mode='Markdown')
+            
+            # Отправляем видео-урок
+            await context.bot.send_video(
                 chat_id=query.message.chat_id,
-                audio=audio_message.file_id
+                video=video_lesson.file_id
             )
         else:
-            # Если аудио не настроено для этого уровня
+            # Если видео не настроено для этого уровня
             await query.edit_message_text(
                 f"Спасибо за оценку! Уровень боли: {pain_level}\n\n"
                 "Заботьтесь о своей спине и не забывайте о регулярных упражнениях! 💙"
             )
             
-            # Уведомляем о том, что нужно добавить аудио (только для логов)
-            logger.warning(f"Нет аудиосообщения для уровня боли {pain_level}")
+            # Уведомляем о том, что нужно добавить видео (только для логов)
+            logger.warning(f"Нет видео-урока для уровня боли {pain_level}")
             
     except Exception as e:
         logger.error(f"Ошибка при обработке оценки боли: {e}")

@@ -1,6 +1,6 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
-from database import SessionLocal, AudioMessage, BotSettings, User, UserResponse
+from database import SessionLocal, VideoLesson, BotSettings, User, UserResponse
 from datetime import datetime
 import logging
 
@@ -8,7 +8,7 @@ import logging
 ADMIN_IDS = [354786612, 740144550]
 
 # Состояния для разговоров
-WAITING_AUDIO, WAITING_TEXT, WAITING_PAIN_LEVEL, WAITING_HOUR, WAITING_MINUTE = range(5)
+WAITING_VIDEO, WAITING_TITLE, WAITING_DESCRIPTION, WAITING_PAIN_LEVEL, WAITING_HOUR, WAITING_MINUTE = range(6)
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     keyboard = [
-        [InlineKeyboardButton("🎵 Управление аудио", callback_data="manage_audio")],
+        [InlineKeyboardButton("🎥 Управление видео-уроками", callback_data="manage_video")],
         [InlineKeyboardButton("⏰ Настройки времени", callback_data="manage_time")],
         [InlineKeyboardButton("📊 Статистика", callback_data="view_stats")],
         [InlineKeyboardButton("👥 Управление пользователями", callback_data="manage_users")]
@@ -46,63 +46,86 @@ async def handle_admin_callback(update: Update, context: ContextTypes.DEFAULT_TY
         await query.edit_message_text("У вас нет прав доступа.")
         return
     
-    if query.data == "manage_audio":
-        await show_audio_management(query, context)
+    if query.data == "manage_video":
+        await show_video_management(query, context)
     elif query.data == "manage_time":
         await show_time_settings(query, context)
     elif query.data == "view_stats":
         await show_statistics(query, context)
     elif query.data == "manage_users":
         await show_user_management(query, context)
-    elif query.data.startswith("add_audio_"):
+    elif query.data.startswith("add_video_"):
         pain_level = int(query.data.split("_")[-1])
         context.user_data['pain_level'] = pain_level
         await query.edit_message_text(
-            f"Отправьте аудиосообщение для уровня боли {pain_level}:"
+            f"Отправьте видео-урок для уровня боли {pain_level}:"
         )
-        return WAITING_AUDIO
-    elif query.data.startswith("edit_audio_"):
+        return WAITING_VIDEO
+    elif query.data.startswith("edit_video_"):
         pain_level = int(query.data.split("_")[-1])
-        await show_audio_edit_options(query, context, pain_level)
+        await show_video_edit_options(query, context, pain_level)
     elif query.data == "back_to_main":
         await show_main_admin_panel(query, context)
     elif query.data == "toggle_reminders":
         await toggle_reminders(query, context)
     elif query.data == "change_time":
         await change_reminder_time(query, context)
-    elif query.data.startswith("delete_audio_"):
+    elif query.data.startswith("delete_video_"):
         pain_level = int(query.data.split("_")[-1])
-        await delete_audio_message(query, context, pain_level)
+        await delete_video_lesson(query, context, pain_level)
+    elif query.data.startswith("replace_video_"):
+        pain_level = int(query.data.split("_")[-1])
+        context.user_data['pain_level'] = pain_level
+        await query.edit_message_text(
+            f"Отправьте новый видео-урок для уровня боли {pain_level}:"
+        )
+        return WAITING_VIDEO
+    elif query.data.startswith("edit_title_"):
+        pain_level = int(query.data.split("_")[-1])
+        context.user_data['pain_level'] = pain_level
+        context.user_data['edit_mode'] = 'title'
+        await query.edit_message_text(
+            f"Отправьте новое название для видео-урока уровня боли {pain_level}:"
+        )
+        return WAITING_TITLE
+    elif query.data.startswith("edit_description_"):
+        pain_level = int(query.data.split("_")[-1])
+        context.user_data['pain_level'] = pain_level
+        context.user_data['edit_mode'] = 'description'
+        await query.edit_message_text(
+            f"Отправьте новое описание для видео-урока уровня боли {pain_level}:"
+        )
+        return WAITING_DESCRIPTION
     elif query.data.startswith("set_time_"):
         time_parts = query.data.split("_")[2:]
         hour, minute = int(time_parts[0]), int(time_parts[1])
         await set_reminder_time(query, context, hour, minute)
 
-async def show_audio_management(query, context):
-    """Показать меню управления аудиосообщениями"""
+async def show_video_management(query, context):
+    """Показать меню управления видео-уроками"""
     db = SessionLocal()
     try:
-        # Получаем существующие аудио для каждого уровня боли
-        audio_messages = db.query(AudioMessage).all()
-        audio_by_level = {}
-        for audio in audio_messages:
-            audio_by_level[audio.pain_level] = audio
+        # Получаем существующие видео для каждого уровня боли
+        video_lessons = db.query(VideoLesson).all()
+        video_by_level = {}
+        for video in video_lessons:
+            video_by_level[video.pain_level] = video
         
         keyboard = []
         for level in range(1, 6):
-            if level in audio_by_level:
-                text = f"✅ Уровень {level} (есть аудио)"
-                callback_data = f"edit_audio_{level}"
+            if level in video_by_level:
+                text = f"✅ Уровень {level} (есть видео)"
+                callback_data = f"edit_video_{level}"
             else:
                 text = f"➕ Добавить для уровня {level}"
-                callback_data = f"add_audio_{level}"
+                callback_data = f"add_video_{level}"
             keyboard.append([InlineKeyboardButton(text, callback_data=callback_data)])
         
         keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")])
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         text = (
-            "🎵 *Управление аудиосообщениями*\n\n"
+            "🎥 *Управление видео-уроками*\n\n"
             "Выберите уровень боли для настройки:"
         )
         
@@ -110,24 +133,30 @@ async def show_audio_management(query, context):
     finally:
         db.close()
 
-async def show_audio_edit_options(query, context, pain_level):
+async def show_video_edit_options(query, context, pain_level):
     """Показать опции редактирования для конкретного уровня боли"""
     keyboard = [
-        [InlineKeyboardButton("🔄 Заменить аудио", callback_data=f"replace_audio_{pain_level}")],
-        [InlineKeyboardButton("📝 Изменить текст", callback_data=f"edit_text_{pain_level}")],
-        [InlineKeyboardButton("🗑 Удалить", callback_data=f"delete_audio_{pain_level}")],
-        [InlineKeyboardButton("🔙 Назад", callback_data="manage_audio")]
+        [InlineKeyboardButton("🔄 Заменить видео", callback_data=f"replace_video_{pain_level}")],
+        [InlineKeyboardButton("📝 Изменить название", callback_data=f"edit_title_{pain_level}")],
+        [InlineKeyboardButton("📄 Изменить описание", callback_data=f"edit_description_{pain_level}")],
+        [InlineKeyboardButton("🗑 Удалить", callback_data=f"delete_video_{pain_level}")],
+        [InlineKeyboardButton("🔙 Назад", callback_data="manage_video")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    # Получаем информацию о текущем аудио
+    # Получаем информацию о текущем видео
     db = SessionLocal()
     try:
-        audio = db.query(AudioMessage).filter(AudioMessage.pain_level == pain_level).first()
-        text = f"🎵 *Аудио для уровня боли {pain_level}*\n\n"
-        if audio:
-            text += f"📝 Текст: {audio.text_description or 'Не задан'}\n"
-            text += f"📅 Создано: {audio.created_at.strftime('%d.%m.%Y %H:%M')}"
+        video = db.query(VideoLesson).filter(VideoLesson.pain_level == pain_level).first()
+        text = f"🎥 *Видео-урок для уровня боли {pain_level}*\n\n"
+        if video:
+            text += f"📝 Название: {video.title or 'Не задано'}\n"
+            text += f"📄 Описание: {video.description or 'Не задано'}\n"
+            if video.duration:
+                minutes = video.duration // 60
+                seconds = video.duration % 60
+                text += f"⏱ Длительность: {minutes}:{seconds:02d}\n"
+            text += f"📅 Создано: {video.created_at.strftime('%d.%m.%Y %H:%M')}"
         
         await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     finally:
@@ -225,8 +254,8 @@ async def show_user_management(query, context):
     finally:
         db.close()
 
-async def receive_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Получение аудиосообщения от администратора"""
+async def receive_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Получение видео-урока от администратора"""
     if not is_admin(update.effective_user.id):
         return ConversationHandler.END
     
@@ -234,54 +263,117 @@ async def receive_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Ошибка: уровень боли не задан.")
         return ConversationHandler.END
     
-    audio = update.message.audio or update.message.voice
-    if not audio:
-        await update.message.reply_text("Пожалуйста, отправьте аудиосообщение.")
-        return WAITING_AUDIO
+    video = update.message.video or update.message.video_note
+    if not video:
+        await update.message.reply_text("Пожалуйста, отправьте видео-урок.")
+        return WAITING_VIDEO
     
-    context.user_data['audio_file_id'] = audio.file_id
+    context.user_data['video_file_id'] = video.file_id
+    context.user_data['video_duration'] = video.duration if hasattr(video, 'duration') else None
     await update.message.reply_text(
-        "Теперь отправьте текстовое описание для этого аудио (или отправьте /skip чтобы пропустить):"
+        "Теперь отправьте название для этого видео-урока (или отправьте /skip чтобы пропустить):"
     )
-    return WAITING_TEXT
+    return WAITING_TITLE
 
-async def receive_text_description(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Получение текстового описания для аудио"""
+async def receive_video_title(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Получение названия для видео-урока"""
     if not is_admin(update.effective_user.id):
         return ConversationHandler.END
     
-    text_description = None if update.message.text == '/skip' else update.message.text
+    title = None if update.message.text == '/skip' else update.message.text
     
-    # Сохраняем в базу данных
-    db = SessionLocal()
-    try:
-        pain_level = context.user_data['pain_level']
-        audio_file_id = context.user_data['audio_file_id']
+    # Проверяем, это редактирование существующего видео или создание нового
+    if context.user_data.get('edit_mode') == 'title':
+        # Редактируем только название
+        db = SessionLocal()
+        try:
+            pain_level = context.user_data['pain_level']
+            video = db.query(VideoLesson).filter(VideoLesson.pain_level == pain_level).first()
+            
+            if video:
+                video.title = title
+                db.commit()
+                await update.message.reply_text(
+                    f"✅ Название видео-урока для уровня боли {pain_level} обновлено!"
+                )
+            else:
+                await update.message.reply_text("❌ Видео-урок не найден.")
+        finally:
+            db.close()
         
-        # Удаляем старое аудио для этого уровня боли если есть
-        old_audio = db.query(AudioMessage).filter(AudioMessage.pain_level == pain_level).first()
-        if old_audio:
-            db.delete(old_audio)
-        
-        # Создаем новое
-        new_audio = AudioMessage(
-            pain_level=pain_level,
-            file_id=audio_file_id,
-            text_description=text_description,
-            created_by_admin=update.effective_user.id
-        )
-        db.add(new_audio)
-        db.commit()
-        
+        context.user_data.clear()
+        return ConversationHandler.END
+    else:
+        # Создание нового видео - продолжаем к описанию
+        context.user_data['video_title'] = title
         await update.message.reply_text(
-            f"✅ Аудиосообщение для уровня боли {pain_level} успешно сохранено!"
+            "Теперь отправьте описание для этого видео-урока (или отправьте /skip чтобы пропустить):"
         )
-    finally:
-        db.close()
+        return WAITING_DESCRIPTION
+
+async def receive_video_description(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Получение описания для видео-урока"""
+    if not is_admin(update.effective_user.id):
+        return ConversationHandler.END
     
-    # Очищаем данные пользователя
-    context.user_data.clear()
-    return ConversationHandler.END
+    description = None if update.message.text == '/skip' else update.message.text
+    
+    # Проверяем, это редактирование существующего видео или создание нового
+    if context.user_data.get('edit_mode') == 'description':
+        # Редактируем только описание
+        db = SessionLocal()
+        try:
+            pain_level = context.user_data['pain_level']
+            video = db.query(VideoLesson).filter(VideoLesson.pain_level == pain_level).first()
+            
+            if video:
+                video.description = description
+                db.commit()
+                await update.message.reply_text(
+                    f"✅ Описание видео-урока для уровня боли {pain_level} обновлено!"
+                )
+            else:
+                await update.message.reply_text("❌ Видео-урок не найден.")
+        finally:
+            db.close()
+        
+        context.user_data.clear()
+        return ConversationHandler.END
+    else:
+        # Создание нового видео
+        db = SessionLocal()
+        try:
+            pain_level = context.user_data['pain_level']
+            video_file_id = context.user_data['video_file_id']
+            video_title = context.user_data.get('video_title')
+            video_duration = context.user_data.get('video_duration')
+            
+            # Удаляем старое видео для этого уровня боли если есть
+            old_video = db.query(VideoLesson).filter(VideoLesson.pain_level == pain_level).first()
+            if old_video:
+                db.delete(old_video)
+            
+            # Создаем новое
+            new_video = VideoLesson(
+                pain_level=pain_level,
+                file_id=video_file_id,
+                title=video_title,
+                description=description,
+                duration=video_duration,
+                created_by_admin=update.effective_user.id
+            )
+            db.add(new_video)
+            db.commit()
+            
+            await update.message.reply_text(
+                f"✅ Видео-урок для уровня боли {pain_level} успешно сохранен!"
+            )
+        finally:
+            db.close()
+        
+        # Очищаем данные пользователя
+        context.user_data.clear()
+        return ConversationHandler.END
 
 async def cancel_admin_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Отмена разговора администратора"""
@@ -292,7 +384,7 @@ async def cancel_admin_conversation(update: Update, context: ContextTypes.DEFAUL
 async def show_main_admin_panel(query, context):
     """Показать главную панель администратора"""
     keyboard = [
-        [InlineKeyboardButton("🎵 Управление аудио", callback_data="manage_audio")],
+        [InlineKeyboardButton("🎥 Управление видео-уроками", callback_data="manage_video")],
         [InlineKeyboardButton("⏰ Настройки времени", callback_data="manage_time")],
         [InlineKeyboardButton("📊 Статистика", callback_data="view_stats")],
         [InlineKeyboardButton("👥 Управление пользователями", callback_data="manage_users")]
@@ -368,20 +460,20 @@ async def change_reminder_time(query, context):
     
     await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
 
-async def delete_audio_message(query, context, pain_level):
-    """Удаление аудиосообщения"""
+async def delete_video_lesson(query, context, pain_level):
+    """Удаление видео-урока"""
     db = SessionLocal()
     try:
-        audio = db.query(AudioMessage).filter(AudioMessage.pain_level == pain_level).first()
-        if audio:
-            db.delete(audio)
+        video = db.query(VideoLesson).filter(VideoLesson.pain_level == pain_level).first()
+        if video:
+            db.delete(video)
             db.commit()
-            await query.answer("Аудиосообщение удалено")
+            await query.answer("Видео-урок удален")
         else:
-            await query.answer("Аудиосообщение не найдено")
+            await query.answer("Видео-урок не найден")
         
-        # Возвращаемся к управлению аудио
-        await show_audio_management(query, context)
+        # Возвращаемся к управлению видео
+        await show_video_management(query, context)
     finally:
         db.close()
 

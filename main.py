@@ -11,8 +11,8 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Mess
 from database import create_tables, init_default_settings, SessionLocal, BotSettings
 from user_handlers import start, help_command, rate_pain, handle_pain_rating, user_stats, send_daily_reminder, stop_reminders, resume_reminders, reminder_status
 from admin_handlers import (
-    admin_panel, handle_admin_callback, receive_audio, receive_text_description, 
-    cancel_admin_conversation, WAITING_AUDIO, WAITING_TEXT, is_admin
+    admin_panel, handle_admin_callback, receive_video, receive_video_title, receive_video_description,
+    cancel_admin_conversation, WAITING_VIDEO, WAITING_TITLE, WAITING_DESCRIPTION, is_admin
 )
 
 # Загружаем переменные окружения
@@ -58,30 +58,36 @@ class SpinaBot:
         # Обработчик команды администратора
         self.application.add_handler(CommandHandler("admin", admin_panel))
         
-        # Разговор для загрузки аудио администраторами
-        audio_conv_handler = ConversationHandler(
-            entry_points=[CallbackQueryHandler(
-                self.audio_entry_point, 
-                pattern=r"^add_audio_\d$"
-            )],
+        # Разговор для загрузки видео администраторами
+        video_conv_handler = ConversationHandler(
+            entry_points=[
+                CallbackQueryHandler(self.video_entry_point, pattern=r"^add_video_\d$"),
+                CallbackQueryHandler(handle_admin_callback, pattern=r"^replace_video_\d$"),
+                CallbackQueryHandler(handle_admin_callback, pattern=r"^edit_title_\d$"),
+                CallbackQueryHandler(handle_admin_callback, pattern=r"^edit_description_\d$")
+            ],
             states={
-                WAITING_AUDIO: [MessageHandler(
-                    filters.AUDIO | filters.VOICE, 
-                    receive_audio
+                WAITING_VIDEO: [MessageHandler(
+                    filters.VIDEO | filters.VIDEO_NOTE, 
+                    receive_video
                 )],
-                WAITING_TEXT: [MessageHandler(
+                WAITING_TITLE: [MessageHandler(
                     filters.TEXT & ~filters.COMMAND, 
-                    receive_text_description
+                    receive_video_title
+                )],
+                WAITING_DESCRIPTION: [MessageHandler(
+                    filters.TEXT & ~filters.COMMAND, 
+                    receive_video_description
                 )]
             },
             fallbacks=[CommandHandler("cancel", cancel_admin_conversation)]
         )
-        self.application.add_handler(audio_conv_handler)
+        self.application.add_handler(video_conv_handler)
         
         # Обработчики callback кнопок
         self.application.add_handler(CallbackQueryHandler(handle_pain_rating, pattern=r"^pain_\d$"))
         self.application.add_handler(CallbackQueryHandler(handle_admin_callback, pattern=r"^(manage_|view_|back_to_|toggle_|change_|list_|broadcast)"))
-        self.application.add_handler(CallbackQueryHandler(handle_admin_callback, pattern=r"^(edit_audio_|delete_audio_|replace_audio_|edit_text_)\d$"))
+        self.application.add_handler(CallbackQueryHandler(handle_admin_callback, pattern=r"^(edit_video_|delete_video_|replace_video_|edit_title_|edit_description_)\d$"))
         self.application.add_handler(CallbackQueryHandler(handle_admin_callback, pattern=r"^set_time_\d+_\d+$"))
         
         # Обработчик неизвестных команд
@@ -90,8 +96,8 @@ class SpinaBot:
         # Обработчик текстовых сообщений
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_text))
     
-    async def audio_entry_point(self, update, context):
-        """Точка входа для разговора загрузки аудио"""
+    async def video_entry_point(self, update, context):
+        """Точка входа для разговора загрузки видео"""
         query = update.callback_query
         if not is_admin(query.from_user.id):
             await query.answer("У вас нет прав доступа.")
@@ -100,9 +106,9 @@ class SpinaBot:
         pain_level = int(query.data.split("_")[-1])
         context.user_data['pain_level'] = pain_level
         await query.edit_message_text(
-            f"Отправьте аудиосообщение для уровня боли {pain_level}:"
+            f"Отправьте видео-урок для уровня боли {pain_level}:"
         )
-        return WAITING_AUDIO
+        return WAITING_VIDEO
     
     async def unknown_command(self, update, context):
         """Обработчик неизвестных команд"""

@@ -22,13 +22,15 @@ class User(Base):
     last_pain_rating = Column(Integer, nullable=True)
     last_rating_date = Column(DateTime, nullable=True)
 
-class AudioMessage(Base):
-    __tablename__ = 'audio_messages'
+class VideoLesson(Base):
+    __tablename__ = 'video_lessons'
     
     id = Column(Integer, primary_key=True)
     pain_level = Column(Integer, nullable=False)  # 1-5
     file_id = Column(String, nullable=False)
-    text_description = Column(Text, nullable=True)
+    title = Column(String, nullable=True)
+    description = Column(Text, nullable=True)
+    duration = Column(Integer, nullable=True)  # в секундах
     created_at = Column(DateTime, default=datetime.utcnow)
     created_by_admin = Column(Integer, nullable=False)
 
